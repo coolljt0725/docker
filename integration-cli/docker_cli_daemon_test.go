@@ -1499,20 +1499,20 @@ func (s *DockerDaemonSuite) TestRunContainerWithBridgeNone(c *check.C) {
 		check.Commentf("There should be eth0 in container when --net=host when bridge network is disabled: %s", out))
 }
 
-func (s *DockerDaemonSuite) TestDaemonRestartWithContainerRunning(t *check.C) {
+func (s *DockerDaemonSuite) TestDaemonRestartWithContainerRunning(c *check.C) {
 	if err := s.d.StartWithBusybox(); err != nil {
-		t.Fatal(err)
+		c.Fatal(err)
 	}
 	if out, err := s.d.Cmd("run", "-ti", "-d", "--name", "test", "busybox"); err != nil {
-		t.Fatal(out, err)
+		c.Fatal(out, err)
 	}
 
 	if err := s.d.Restart(); err != nil {
-		t.Fatal(err)
+		c.Fatal(err)
 	}
 	// Container 'test' should be removed without error
 	if out, err := s.d.Cmd("rm", "test"); err != nil {
-		t.Fatal(out, err)
+		c.Fatal(out, err)
 	}
 }
 
