@@ -42,7 +42,9 @@ type serverResponse struct {
 
 // HTTPClient creates a new HTTP client with the cli's client transport instance.
 func (cli *DockerCli) HTTPClient() *http.Client {
-	return &http.Client{Transport: cli.transport}
+	return &http.Client{
+		Transport: cli.transport,
+	}
 }
 
 func (cli *DockerCli) encodeData(data interface{}) (*bytes.Buffer, error) {
@@ -67,6 +69,7 @@ func (cli *DockerCli) clientRequest(method, path string, in io.Reader, headers m
 		in = bytes.NewReader([]byte{})
 	}
 	req, err := http.NewRequest(method, fmt.Sprintf("%s/v%s%s", cli.basePath, api.Version, path), in)
+	fmt.Printf("req URL is %s\n", req.URL.String())
 	if err != nil {
 		return serverResp, err
 	}
@@ -110,7 +113,28 @@ func (cli *DockerCli) clientRequest(method, path string, in io.Reader, headers m
 
 		return serverResp, fmt.Errorf("An error occurred trying to connect: %v", err)
 	}
-
+	if serverResp.statusCode < 400 && serverResp.statusCode >= 300 {
+		fmt.Printf("location is %s\n", resp.Header["Location"])
+		if len(resp.Header["Location"]) > 1 {
+			return serverResp, fmt.Errorf("An error occurred")
+		}
+		for _, location := range resp.Header["Location"] {
+			fmt.Printf("location is %s\n", location)
+			u, err := url.Parse(location)
+			if err != nil {
+				return serverResp, err
+			}
+			req.URL = u
+			fmt.Printf("location is %s\n", req.URL.String())
+			resp, err = cli.HTTPClient().Do(req)
+			if err != nil {
+				return nil, err
+			}
+			if resp != nil {
+				serverResp.statusCode = resp.StatusCode
+			}
+		}
+	}
 	if serverResp.statusCode < 200 || serverResp.statusCode >= 400 {
 		body, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
