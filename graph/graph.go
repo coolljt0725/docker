@@ -148,6 +148,22 @@ func (graph *Graph) restore() error {
 		id := v.Name()
 		if graph.driver.Exists(id) {
 			ids = append(ids, id)
+			pth := filepath.Join(graph.root, id, "json")
+			jsonSource, err := os.Open(pth)
+			if err != nil {
+				return err
+			}
+			defer jsonSource.Close()
+			decoder := json.NewDecoder(jsonSource)
+			img := &image.Image{}
+			if err := decoder.Decode(img); err != nil {
+				return err
+			}
+			graph.parentRefsMutex.Lock()
+			if img.Parent != "" {
+				graph.parentRefs[img.Parent]++
+			}
+			graph.parentRefsMutex.Unlock()
 		}
 	}
 
