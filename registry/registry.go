@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -235,13 +236,20 @@ func ContinueOnError(err error) bool {
 
 // NewTransport returns a new HTTP transport. If tlsConfig is nil, it uses the
 // default TLS configuration.
-func NewTransport(tlsConfig *tls.Config) *http.Transport {
+func NewTransport(tlsConfig *tls.Config, proxy string) *http.Transport {
 	if tlsConfig == nil {
 		var cfg = tlsconfig.ServerDefault
 		tlsConfig = &cfg
 	}
+	proxyFunc := http.ProxyFromEnvironment
+	if proxy != "" {
+		tmpProxy, err := url.Parse(proxy)
+		if err == nil {
+			proxyFunc = http.ProxyURL(tmpProxy)
+		}
+	}
 	return &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
+		Proxy: proxyFunc,
 		Dial: (&net.Dialer{
 			Timeout:   30 * time.Second,
 			KeepAlive: 30 * time.Second,

@@ -42,6 +42,8 @@ type ImagePullConfig struct {
 	ReferenceStore reference.Store
 	// DownloadManager manages concurrent pulls.
 	DownloadManager *xfer.LayerDownloadManager
+	// Proxy to use on pull
+	Proxy string
 }
 
 // Puller is an interface that abstracts pulling for different API versions.

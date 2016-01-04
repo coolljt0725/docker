@@ -18,6 +18,9 @@ func (cli *Client) ImagePull(options types.ImagePullOptions, privilegeFunc Reque
 	if options.Tag != "" {
 		query.Set("tag", options.Tag)
 	}
+	if options.Proxy != "" {
+		query.Set("proxy", options.Proxy)
+	}
 
 	resp, err := cli.tryImageCreate(query, options.RegistryAuth)
 	if resp.statusCode == http.StatusUnauthorized {

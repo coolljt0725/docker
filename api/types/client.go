@@ -196,6 +196,7 @@ type ImagePullOptions struct {
 	Tag     string
 	// RegistryAuth is the base64 encoded credentials for this server
 	RegistryAuth string
+	Proxy        string
 }
 
 //ImagePushOptions holds information to push images.

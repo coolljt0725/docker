@@ -45,7 +45,7 @@ func (s *Service) Auth(authConfig *types.AuthConfig) (string, error) {
 		endpointVersion = APIVersion2
 	}
 
-	endpoint, err := NewEndpoint(index, nil, endpointVersion)
+	endpoint, err := NewEndpoint(index, nil, endpointVersion, "")
 	if err != nil {
 		return "", err
 	}
@@ -85,7 +85,7 @@ func (s *Service) Search(term string, authConfig *types.AuthConfig, headers map[
 	}
 
 	// *TODO: Search multiple indexes.
-	endpoint, err := NewEndpoint(index, http.Header(headers), APIVersionUnknown)
+	endpoint, err := NewEndpoint(index, http.Header(headers), APIVersionUnknown, "")
 	if err != nil {
 		return nil, err
 	}
@@ -129,8 +129,8 @@ type APIEndpoint struct {
 }
 
 // ToV1Endpoint returns a V1 API endpoint based on the APIEndpoint
-func (e APIEndpoint) ToV1Endpoint(metaHeaders http.Header) (*Endpoint, error) {
-	return newEndpoint(e.URL, e.TLSConfig, metaHeaders)
+func (e APIEndpoint) ToV1Endpoint(metaHeaders http.Header, proxy string) (*Endpoint, error) {
+	return newEndpoint(e.URL, proxy, e.TLSConfig, metaHeaders)
 }
 
 // TLSConfig constructs a client TLS configuration based on server defaults

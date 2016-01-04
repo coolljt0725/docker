@@ -87,6 +87,7 @@ func (s *router) postImagesCreate(ctx context.Context, w http.ResponseWriter, r 
 		repo    = r.Form.Get("repo")
 		tag     = r.Form.Get("tag")
 		message = r.Form.Get("message")
+		proxy   = r.Form.Get("proxy")
 	)
 	authEncoded := r.Header.Get("X-Registry-Auth")
 	authConfig := &types.AuthConfig{}
@@ -133,8 +134,7 @@ func (s *router) postImagesCreate(ctx context.Context, w http.ResponseWriter, r 
 						metaHeaders[k] = v
 					}
 				}
-
-				err = s.daemon.PullImage(ref, metaHeaders, authConfig, output)
+				err = s.daemon.PullImage(ref, metaHeaders, authConfig, proxy, output)
 			}
 		}
 	} else { //import

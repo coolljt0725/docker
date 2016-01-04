@@ -50,7 +50,7 @@ type pushMap struct {
 }
 
 func (p *v2Pusher) Push(ctx context.Context) (err error) {
-	p.repo, p.confirmedV2, err = NewV2Repository(ctx, p.repoInfo, p.endpoint, p.config.MetaHeaders, p.config.AuthConfig, "push", "pull")
+	p.repo, p.confirmedV2, err = NewV2Repository(ctx, p.repoInfo, p.endpoint, p.config.MetaHeaders, p.config.AuthConfig, p.config.Proxy, "push", "pull")
 	if err != nil {
 		logrus.Debugf("Error getting v2 registry: %v", err)
 		return fallbackError{err: err, confirmedV2: p.confirmedV2}

@@ -19,6 +19,7 @@ import (
 func (cli *DockerCli) CmdPull(args ...string) error {
 	cmd := Cli.Subcmd("pull", []string{"NAME[:TAG|@DIGEST]"}, Cli.DockerCommands["pull"].Description, true)
 	allTags := cmd.Bool([]string{"a", "-all-tags"}, false, "Download all tagged images in the repository")
+	proxy := cmd.String([]string{"-proxy"}, "", "Proxy used during pull")
 	addTrustedFlags(cmd, true)
 	cmd.Require(flag.Exact, 1)
 
@@ -59,13 +60,13 @@ func (cli *DockerCli) CmdPull(args ...string) error {
 
 	if isTrusted() && !ref.HasDigest() {
 		// Check if tag is digest
-		return cli.trustedPull(repoInfo, ref, authConfig, requestPrivilege)
+		return cli.trustedPull(repoInfo, ref, authConfig, requestPrivilege, *proxy)
 	}
 
-	return cli.imagePullPrivileged(authConfig, distributionRef.String(), "", requestPrivilege)
+	return cli.imagePullPrivileged(authConfig, distributionRef.String(), "", requestPrivilege, *proxy)
 }
 
-func (cli *DockerCli) imagePullPrivileged(authConfig types.AuthConfig, imageID, tag string, requestPrivilege lib.RequestPrivilegeFunc) error {
+func (cli *DockerCli) imagePullPrivileged(authConfig types.AuthConfig, imageID, tag string, requestPrivilege lib.RequestPrivilegeFunc, proxy string) error {
 
 	encodedAuth, err := encodeAuthToBase64(authConfig)
 	if err != nil {
@@ -75,6 +76,7 @@ func (cli *DockerCli) imagePullPrivileged(authConfig types.AuthConfig, imageID, 
 		ImageID:      imageID,
 		Tag:          tag,
 		RegistryAuth: encodedAuth,
+		Proxy:        proxy,
 	}
 
 	responseBody, err := cli.client.ImagePull(options, requestPrivilege)

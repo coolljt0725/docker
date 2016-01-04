@@ -50,16 +50,22 @@ func (dcs dumbCredentialStore) Basic(*url.URL) (string, string) {
 // NewV2Repository returns a repository (v2 only). It creates a HTTP transport
 // providing timeout settings and authentication support, and also verifies the
 // remote API version.
-func NewV2Repository(ctx context.Context, repoInfo *registry.RepositoryInfo, endpoint registry.APIEndpoint, metaHeaders http.Header, authConfig *types.AuthConfig, actions ...string) (repo distribution.Repository, foundVersion bool, err error) {
+func NewV2Repository(ctx context.Context, repoInfo *registry.RepositoryInfo, endpoint registry.APIEndpoint, metaHeaders http.Header, authConfig *types.AuthConfig, proxy string, actions ...string) (repo distribution.Repository, foundVersion bool, err error) {
 	repoName := repoInfo.FullName()
 	// If endpoint does not support CanonicalName, use the RemoteName instead
 	if endpoint.TrimHostname {
 		repoName = repoInfo.RemoteName()
 	}
-
+	proxyFunc := http.ProxyFromEnvironment
+	if proxy != "" {
+		tmpProxy, err := url.Parse(proxy)
+		if err == nil {
+			proxyFunc = http.ProxyURL(tmpProxy)
+		}
+	}
 	// TODO(dmcgowan): Call close idle connections when complete, use keep alive
 	base := &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
+		Proxy: proxyFunc,
 		Dial: (&net.Dialer{
 			Timeout:   30 * time.Second,
 			KeepAlive: 30 * time.Second,

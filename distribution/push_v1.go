@@ -37,11 +37,11 @@ func (p *v1Pusher) Push(ctx context.Context) error {
 	// Adds Docker-specific headers as well as user-specified headers (metaHeaders)
 	tr := transport.NewTransport(
 		// TODO(tiborvass): was NoTimeout
-		registry.NewTransport(tlsConfig),
+		registry.NewTransport(tlsConfig, p.config.Proxy),
 		registry.DockerHeaders(p.config.MetaHeaders)...,
 	)
 	client := registry.HTTPClient(tr)
-	v1Endpoint, err := p.endpoint.ToV1Endpoint(p.config.MetaHeaders)
+	v1Endpoint, err := p.endpoint.ToV1Endpoint(p.config.MetaHeaders, p.config.Proxy)
 	if err != nil {
 		logrus.Debugf("Could not get v1 endpoint: %v", err)
 		return fallbackError{err: err}

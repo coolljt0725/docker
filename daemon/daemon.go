@@ -1053,7 +1053,7 @@ func writeDistributionProgress(cancelFunc func(), outStream io.Writer, progressC
 
 // PullImage initiates a pull operation. image is the repository name to pull, and
 // tag may be either empty, or indicate a specific tag to pull.
-func (daemon *Daemon) PullImage(ref reference.Named, metaHeaders map[string][]string, authConfig *types.AuthConfig, outStream io.Writer) error {
+func (daemon *Daemon) PullImage(ref reference.Named, metaHeaders map[string][]string, authConfig *types.AuthConfig, proxy string, outStream io.Writer) error {
 	// Include a buffer so that slow client connections don't affect
 	// transfer performance.
 	progressChan := make(chan progress.Progress, 100)
@@ -1077,6 +1077,7 @@ func (daemon *Daemon) PullImage(ref reference.Named, metaHeaders map[string][]st
 		ImageStore:      daemon.imageStore,
 		ReferenceStore:  daemon.referenceStore,
 		DownloadManager: daemon.downloadManager,
+		Proxy:           proxy,
 	}
 
 	err := distribution.Pull(ctx, ref, imagePullConfig)
