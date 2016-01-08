@@ -378,6 +378,10 @@ func (m *containerMonitor) resetContainer(lock bool) {
 		container.LogDriver = nil
 	}
 
+	if container.Command == nil {
+		return
+	}
+
 	c := container.Command.ProcessConfig.Cmd
 
 	container.Command.ProcessConfig.Cmd = exec.Cmd{
