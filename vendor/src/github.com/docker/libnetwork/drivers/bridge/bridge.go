@@ -869,6 +869,21 @@ func (d *driver) CreateEndpoint(nid, eid string, ifInfo driverapi.InterfaceInfo,
 	n.endpoints[eid] = endpoint
 	n.Unlock()
 
+	if _, ok := epOptions["restore"]; ok {
+		logrus.Debugf("Restore endpoint %s", eid)
+		endpoint.macAddress = ifInfo.MacAddress()
+		endpoint.addr = ifInfo.Address()
+		endpoint.addrv6 = ifInfo.AddressIPv6()
+
+		// restore port mapping
+		endpoint.portMapping, err = n.allocatePorts(epConfig, endpoint, n.config.DefaultBindingIP, d.config.EnableUserlandProxy)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	}
+
 	// On failure make sure to remove the endpoint
 	defer func() {
 		if err != nil {

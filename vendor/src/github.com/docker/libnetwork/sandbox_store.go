@@ -231,3 +231,58 @@ func (c *controller) sandboxCleanup() {
 		}
 	}
 }
+
+func (c *controller) sandboxRestore() {
+	store := c.getStore(datastore.LocalScope)
+	if store == nil {
+		logrus.Errorf("Could not find local scope store while trying to cleanup sandboxes")
+		return
+	}
+
+	kvol, err := store.List(datastore.Key(sandboxPrefix), &sbState{c: c})
+	if err != nil && err != datastore.ErrKeyNotFound {
+		logrus.Errorf("failed to get sandboxes for scope %s: %v", store.Scope(), err)
+		return
+	}
+	for _, kvo := range kvol {
+		sbs := kvo.(*sbState)
+
+		sb := &sandbox{
+			id:          sbs.ID,
+			controller:  sbs.c,
+			containerID: sbs.Cid,
+			endpoints:   epHeap{},
+			epPriority:  map[string]int{},
+			dbIndex:     sbs.dbIndex,
+			isStub:      true,
+			dbExists:    true,
+		}
+
+		sb.osSbox, err = osl.NewSandbox(sb.Key(), true)
+		if err != nil {
+			logrus.Errorf("failed to create new osl sandbox while trying to build sandbox for cleanup: %v", err)
+			continue
+		}
+
+		for _, eps := range sbs.Eps {
+			n, err := c.getNetworkFromStore(eps.Nid)
+			var ep *endpoint
+			if err != nil {
+				logrus.Errorf("getNetworkFromStore for nid %s failed while trying to build sandbox for cleanup: %v", eps.Nid, err)
+				n = &network{id: eps.Nid, ctrlr: c, drvOnce: &sync.Once{}}
+				ep = &endpoint{id: eps.Eid, network: n, sandboxID: sbs.ID}
+			} else {
+				ep, err = n.getEndpointFromStore(eps.Eid)
+				if err != nil {
+					logrus.Errorf("getEndpointFromStore for eid %s failed while trying to build sandbox for cleanup: %v", eps.Eid, err)
+					ep = &endpoint{id: eps.Eid, network: n, sandboxID: sbs.ID}
+				}
+			}
+
+			heap.Push(&sb.endpoints, ep)
+		}
+		c.Lock()
+		c.sandboxes[sb.id] = sb
+		c.Unlock()
+	}
+}

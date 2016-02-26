@@ -658,9 +658,13 @@ func driverOptions(config *Config) []nwconfig.Option {
 
 func initBridgeDriver(controller libnetwork.NetworkController, config *Config) error {
 	if n, err := controller.NetworkByName("bridge"); err == nil {
-		if err = n.Delete(); err != nil {
-			return fmt.Errorf("could not delete the default bridge network: %v", err)
+		//	if err = n.Delete(); err != nil {
+		//		return fmt.Errorf("could not delete the default bridge network: %v", err)
+		//	}
+		if err := controller.RegisterNetwork(n.ID()); err != nil {
+			return err
 		}
+		return nil
 	}
 
 	bridgeName := bridge.DefaultBridgeName

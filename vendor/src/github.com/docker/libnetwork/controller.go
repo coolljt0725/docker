@@ -109,6 +109,9 @@ type NetworkController interface {
 
 	// ReloadCondfiguration updates the controller configuration
 	ReloadConfiguration(cfgOptions ...config.Option) error
+
+	// Register a exist network to network controller
+	RegisterNetwork(id string) error
 }
 
 // NetworkWalker is a client provided function which will be used to walk the Networks.
@@ -185,14 +188,41 @@ func New(cfgOptions ...config.Option) (NetworkController, error) {
 		return nil, err
 	}
 
-	c.sandboxCleanup()
-	c.cleanupLocalEndpoints()
-
+	//	c.sandboxCleanup()
+	//	c.cleanupLocalEndpoints()
+	// Do not clean up the sandbox and endpoints
+	c.sandboxRestore()
 	if err := c.startExternalKeyListener(); err != nil {
 		return nil, err
 	}
 
 	return c, nil
+}
+
+func (c *controller) RegisterNetwork(id string) error {
+	n, err := c.NetworkByID(id)
+	if err != nil {
+		return err
+	}
+	if err := c.addNetwork(n.(*network)); err != nil {
+		return err
+	}
+	d, err := n.(*network).driver(true)
+	if err != nil {
+		return fmt.Errorf("failed to add endpoint: %v", err)
+	}
+
+	endpoints := n.Endpoints()
+	for _, ep := range endpoints {
+		options := ep.(*endpoint).generic
+		options["restore"] = true
+		err = d.CreateEndpoint(n.(*network).id, ep.(*endpoint).id, ep.(*endpoint).Interface(), options)
+		if err != nil {
+			return fmt.Errorf("failed to register existed endpoint %s\n", ep.Name())
+		}
+	}
+	// Need to make sure this is need
+	return c.updateToStore(n.(*network).epCnt)
 }
 
 var procReloadConfig = make(chan (bool), 1)
