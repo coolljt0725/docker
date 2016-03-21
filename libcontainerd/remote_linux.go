@@ -267,7 +267,7 @@ func (r *remote) handleEventStream(events containerd.API_EventsClient) {
 				r.updateEventTimestamp(time.Unix(int64(e.Timestamp), 0))
 			}
 		} else {
-			logrus.Debugf("received containerd event: %#v", e)
+			logrus.Debugf("received containerd event: %+v", e)
 
 			var container *container
 			var c *client
