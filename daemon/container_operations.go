@@ -29,7 +29,7 @@ var (
 	ErrRootFSReadOnly = errors.New("container rootfs is marked read-only")
 )
 
-func (daemon *Daemon) buildSandboxOptions(container *container.Container, n libnetwork.Network) ([]libnetwork.SandboxOption, error) {
+func (daemon *Daemon) buildSandboxOptions(container *container.Container, restore bool) ([]libnetwork.SandboxOption, error) {
 	var (
 		sboxOptions []libnetwork.SandboxOption
 		err         error
@@ -114,71 +114,110 @@ func (daemon *Daemon) buildSandboxOptions(container *container.Container, n libn
 		sboxOptions = append(sboxOptions, libnetwork.OptionExtraHost(parts[0], parts[1]))
 	}
 
-	if container.HostConfig.PortBindings != nil {
-		for p, b := range container.HostConfig.PortBindings {
-			bindings[p] = []nat.PortBinding{}
-			for _, bb := range b {
-				bindings[p] = append(bindings[p], nat.PortBinding{
-					HostIP:   bb.HostIP,
-					HostPort: bb.HostPort,
-				})
+	// if we call this in restoring, use container.NetworkSettings.Ports to
+	// populate exposed oports and port bindings
+	if restore {
+		for port, binds := range container.NetworkSettings.Ports {
+			splits := strings.Split(string(port), "/")
+			if len(splits) != 2 {
+				logrus.Errorf("error port format")
+				continue
 			}
-		}
-	}
-
-	portSpecs := container.Config.ExposedPorts
-	ports := make([]nat.Port, len(portSpecs))
-	var i int
-	for p := range portSpecs {
-		ports[i] = p
-		i++
-	}
-	nat.SortPortMap(ports, bindings)
-	for _, port := range ports {
-		expose := types.TransportPort{}
-		expose.Proto = types.ParseProtocol(port.Proto())
-		expose.Port = uint16(port.Int())
-		exposeList = append(exposeList, expose)
-
-		pb := types.PortBinding{Port: expose.Port, Proto: expose.Proto}
-		binding := bindings[port]
-		for i := 0; i < len(binding); i++ {
-			pbCopy := pb.GetCopy()
-			newP, err := nat.NewPort(nat.SplitProtoPort(binding[i].HostPort))
-			var portStart, portEnd int
-			if err == nil {
-				portStart, portEnd, err = newP.Range()
-			}
+			portNum, err := nat.ParsePort(splits[0])
 			if err != nil {
-				return nil, fmt.Errorf("Error parsing HostPort value(%s):%v", binding[i].HostPort, err)
+				logrus.Errorf("failed to parse port: %v", err)
 			}
-			pbCopy.HostPort = uint16(portStart)
-			pbCopy.HostPortEnd = uint16(portEnd)
-			pbCopy.HostIP = net.ParseIP(binding[i].HostIP)
-			pbList = append(pbList, pbCopy)
+			proto := types.ParseProtocol(splits[1])
+			p := types.TransportPort{Proto: proto, Port: uint16(portNum)}
+			exposeList = append(exposeList, p)
+			if len(binds) != 0 {
+				for _, bind := range binds {
+					hostPort, err := nat.ParsePort(bind.HostPort)
+					if err != nil {
+						logrus.Errorf("failed parse hostport: %v", err)
+						continue
+					}
+					pb := types.PortBinding{
+						Proto:       proto,
+						Port:        uint16(portNum),
+						HostIP:      net.ParseIP(bind.HostIP),
+						HostPort:    uint16(hostPort),
+						HostPortEnd: uint16(hostPort),
+					}
+					pbList = append(pbList, pb)
+				}
+			}
 		}
 
-		if container.HostConfig.PublishAllPorts && len(binding) == 0 {
-			pbList = append(pbList, pb)
+	} else {
+		if container.HostConfig.PortBindings != nil {
+			for p, b := range container.HostConfig.PortBindings {
+				bindings[p] = []nat.PortBinding{}
+				for _, bb := range b {
+					bindings[p] = append(bindings[p], nat.PortBinding{
+						HostIP:   bb.HostIP,
+						HostPort: bb.HostPort,
+					})
+				}
+			}
+		}
+
+		portSpecs := container.Config.ExposedPorts
+		ports := make([]nat.Port, len(portSpecs))
+		var i int
+		for p := range portSpecs {
+			ports[i] = p
+			i++
+		}
+		nat.SortPortMap(ports, bindings)
+		for _, port := range ports {
+			expose := types.TransportPort{}
+			expose.Proto = types.ParseProtocol(port.Proto())
+			expose.Port = uint16(port.Int())
+			exposeList = append(exposeList, expose)
+
+			pb := types.PortBinding{Port: expose.Port, Proto: expose.Proto}
+			binding := bindings[port]
+			for i := 0; i < len(binding); i++ {
+				pbCopy := pb.GetCopy()
+				newP, err := nat.NewPort(nat.SplitProtoPort(binding[i].HostPort))
+				var portStart, portEnd int
+				if err == nil {
+					portStart, portEnd, err = newP.Range()
+				}
+				if err != nil {
+					return nil, fmt.Errorf("Error parsing HostPort value(%s):%v", binding[i].HostPort, err)
+				}
+				pbCopy.HostPort = uint16(portStart)
+				pbCopy.HostPortEnd = uint16(portEnd)
+				pbCopy.HostIP = net.ParseIP(binding[i].HostIP)
+				pbList = append(pbList, pbCopy)
+			}
+
+			if container.HostConfig.PublishAllPorts && len(binding) == 0 {
+				pbList = append(pbList, pb)
+			}
 		}
 	}
-
 	sboxOptions = append(sboxOptions,
 		libnetwork.OptionPortMapping(pbList),
 		libnetwork.OptionExposedPorts(exposeList))
 
 	// Legacy Link feature is supported only for the default bridge network.
 	// return if this call to build join options is not for default bridge network
-	if n.Name() != defaultNetName {
+	// Legacy Link is only supported by docker run --link
+	if _, ok := container.NetworkSettings.Networks[defaultNetName]; !container.HostConfig.NetworkMode.IsDefault() || !ok {
 		return sboxOptions, nil
 	}
 
-	ep, _ := container.GetEndpointInNetwork(n)
-	if ep == nil {
+	if container.NetworkSettings.Networks[defaultNetName].EndpointID == "" {
 		return sboxOptions, nil
 	}
 
-	var childEndpoints, parentEndpoints []string
+	var (
+		childEndpoints, parentEndpoints []string
+		cEndpointID                     string
+	)
 
 	children := daemon.children(container)
 	for linkAlias, child := range children {
@@ -193,9 +232,9 @@ func (daemon *Daemon) buildSandboxOptions(container *container.Container, n libn
 			aliasList = aliasList + " " + child.Name[1:]
 		}
 		sboxOptions = append(sboxOptions, libnetwork.OptionExtraHost(aliasList, child.NetworkSettings.Networks[defaultNetName].IPAddress))
-		cEndpoint, _ := child.GetEndpointInNetwork(n)
-		if cEndpoint != nil && cEndpoint.ID() != "" {
-			childEndpoints = append(childEndpoints, cEndpoint.ID())
+		cEndpointID = child.NetworkSettings.Networks[defaultNetName].EndpointID
+		if cEndpointID != "" {
+			childEndpoints = append(childEndpoints, cEndpointID)
 		}
 	}
 
@@ -212,8 +251,8 @@ func (daemon *Daemon) buildSandboxOptions(container *container.Container, n libn
 			alias,
 			bridgeSettings.IPAddress,
 		))
-		if ep.ID() != "" {
-			parentEndpoints = append(parentEndpoints, ep.ID())
+		if cEndpointID != "" {
+			parentEndpoints = append(parentEndpoints, cEndpointID)
 		}
 	}
 
@@ -305,7 +344,7 @@ func (daemon *Daemon) updateNetwork(container *container.Container) error {
 		return nil
 	}
 
-	options, err := daemon.buildSandboxOptions(container, n)
+	options, err := daemon.buildSandboxOptions(container, false)
 	if err != nil {
 		return fmt.Errorf("Update network failed: %v", err)
 	}
@@ -556,7 +595,7 @@ func (daemon *Daemon) connectToNetwork(container *container.Container, idOrName 
 	}
 
 	if sb == nil {
-		options, err := daemon.buildSandboxOptions(container, n)
+		options, err := daemon.buildSandboxOptions(container, false)
 		if err != nil {
 			return err
 		}
@@ -691,6 +730,9 @@ func (daemon *Daemon) getNetworkedContainer(containerID, connectedContainerID st
 }
 
 func (daemon *Daemon) releaseNetwork(container *container.Container) {
+	if daemon.netController == nil {
+		return
+	}
 	if container.HostConfig.NetworkMode.IsContainer() || container.Config.NetworkDisabled {
 		return
 	}

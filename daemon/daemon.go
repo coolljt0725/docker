@@ -268,6 +268,7 @@ func (daemon *Daemon) restore() error {
 
 	var migrateLegacyLinks bool
 	restartContainers := make(map[*container.Container]chan struct{})
+	oldRunningContainers := make(map[string]interface{})
 	for _, c := range containers {
 		if err := daemon.registerName(c); err != nil {
 			logrus.Errorf("Failed to register container %s: %s", c.ID, err)
@@ -295,6 +296,14 @@ func (daemon *Daemon) restore() error {
 					logrus.Errorf("Failed to restore with containerd: %q", err)
 					return
 				}
+				if !c.HostConfig.NetworkMode.IsContainer() {
+					option, err := daemon.buildSandboxOptions(c, true)
+					if err != nil {
+						logrus.Errorf("Failed build sandbox option to restore container %s: %v", c.ID, err)
+					}
+					oldRunningContainers[c.ID] = option
+				}
+
 			}
 			// fixme: only if not running
 			// get list of containers we need to restart
@@ -326,6 +335,10 @@ func (daemon *Daemon) restore() error {
 		}(c)
 	}
 	wg.Wait()
+	daemon.netController, err = daemon.initNetworkController(daemon.configStore, oldRunningContainers)
+	if err != nil {
+		return fmt.Errorf("Error initializing network controller: %v", err)
+	}
 
 	// migrate any legacy links from sqlite
 	linkdbFile := filepath.Join(daemon.root, "linkgraph.db")
@@ -768,11 +781,6 @@ func NewDaemon(config *Config, registryService *registry.Service, containerdRemo
 	// initialized, the daemon is registered and we can store the discovery backend as its read-only
 	if err := d.initDiscovery(config); err != nil {
 		return nil, err
-	}
-
-	d.netController, err = d.initNetworkController(config)
-	if err != nil {
-		return nil, fmt.Errorf("Error initializing network controller: %v", err)
 	}
 
 	sysInfo := sysinfo.New(false)
