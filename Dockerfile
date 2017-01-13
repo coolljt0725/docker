@@ -54,8 +54,6 @@ RUN apt-get update && apt-get install -y \
 	python-pip \
 	python-websocket \
 	reprepro \
-	ruby1.9.1 \
-	ruby1.9.1-dev \
 	s3cmd=1.1.0* \
 	ubuntu-zfs \
 	xfsprogs \
@@ -126,9 +124,6 @@ ENV GO_LINT_COMMIT f42f5c1c440621302702cb0741e9d2ca547ae80f
 RUN git clone https://github.com/golang/lint.git /go/src/github.com/golang/lint \
 	&& (cd /go/src/github.com/golang/lint && git checkout -q $GO_LINT_COMMIT) \
 	&& go install -v github.com/golang/lint/golint
-
-# TODO replace FPM with some very minimal debhelper stuff
-RUN gem install --no-rdoc --no-ri fpm --version 1.3.2
 
 # Install registry
 ENV REGISTRY_COMMIT ec87e9b6971d831f0eff752ddb54fb64693e51cd
